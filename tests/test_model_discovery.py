@@ -19,6 +19,7 @@ from esperanto.model_discovery import (
     get_google_models,
     get_openai_compatible_models,
     get_openai_models,
+    get_zai_models,
 )
 
 
@@ -430,6 +431,50 @@ class TestOpenAICompatibleDiscovery:
         assert call_args.args[0] == "http://localhost:1234/v1/models"
 
 
+class TestZaiDiscovery:
+    """Test Z.ai model discovery."""
+
+    @patch("esperanto.model_discovery.httpx.get")
+    def test_get_zai_models_success(self, mock_get):
+        """Test successful Z.ai model discovery with GLM filtering."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "data": [
+                {"id": "glm-5.2", "owned_by": "zai"},
+                {"id": "glm-4.5-flash", "owned_by": "zai"},
+                {"id": "embedding-3", "owned_by": "zai"},
+            ]
+        }
+        mock_get.return_value = mock_response
+
+        models = get_zai_models(api_key="test-key")
+
+        # Should only return GLM models
+        assert len(models) == 2
+        assert all(m.id.startswith("glm") for m in models)
+        assert all(m.owned_by == "Z.ai" for m in models)
+
+    def test_get_zai_models_no_api_key(self):
+        """Test that ValueError is raised when API key is missing."""
+        with patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(ValueError, match=r"Z\.ai API key not found"):
+                get_zai_models()
+
+    @patch("esperanto.model_discovery.httpx.get")
+    def test_get_zai_models_api_error(self, mock_get):
+        """Test that API errors are properly handled."""
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.json.return_value = {
+            "error": {"message": "Invalid API key"}
+        }
+        mock_get.return_value = mock_response
+
+        with pytest.raises(RuntimeError, match=r"Z\.ai API error"):
+            get_zai_models(api_key="bad-key")
+
+
 class TestProviderRegistry:
     """Test the provider registry."""
 
@@ -437,7 +482,7 @@ class TestProviderRegistry:
         """Test that registry has entries for all supported providers."""
         expected_providers = [
             "openai", "openai-compatible", "anthropic", "google", "vertex", "mistral",
-            "groq", "deepseek", "ollama", "openrouter", "xai",
+            "groq", "deepseek", "ollama", "openrouter", "xai", "zai",
             "perplexity", "jina", "voyage", "azure", "transformers"
         ]
 

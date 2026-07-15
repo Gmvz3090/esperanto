@@ -103,3 +103,56 @@ model = AIFactory.create_language(
     config={"api_key": "your-key", "base_url": "https://api.z.ai/api/paas/v4"}
 )
 ```
+
+## Troubleshooting
+
+### Common Errors
+
+**Authentication Error:**
+```
+Error: Z.ai API key not found
+```
+**Solution:** Set the `ZAI_API_KEY` environment variable or pass `api_key` in config. Verify your key at https://z.ai/
+
+**Invalid API Key:**
+```
+Error: Invalid API key
+```
+**Solution:** Regenerate your key in the Z.ai console and make sure the key has available credits.
+
+**Rate Limit Error:**
+```
+Error: Rate limit exceeded
+```
+**Solution:** Implement retry logic with exponential backoff or upgrade your plan.
+
+**Endpoint Error:**
+```
+Error: 404 Not Found
+```
+**Solution:** Check the base URL. The default is `https://api.z.ai/api/paas/v4` — if you set `ZAI_BASE_URL`, make sure it points to the OpenAI-compatible endpoint.
+
+**Timeout Error:**
+```
+Error: Request timed out
+```
+**Solution:** Increase the timeout:
+```python
+config={"timeout": 120.0}
+```
+
+**Invalid Model Name:**
+```
+Error: Model not found
+```
+**Solution:** Use exact model names such as `glm-5.2` or `glm-4.5-flash`. List available models with `AIFactory.get_provider_models("zai")`.
+
+### Best Practices
+
+1. **Temperature Settings:**
+   - 0.3-0.5 for factual/code tasks
+   - 0.7-1.0 for creative tasks
+
+2. **Streaming:** Enable streaming for better UX with longer responses
+
+3. **JSON Mode:** Use structured output when you need parseable results

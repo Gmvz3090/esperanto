@@ -782,6 +782,84 @@ def get_xai_models(
         raise RuntimeError(f"Failed to fetch xAI models: {e}")
 
 
+def get_zai_models(
+    api_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+) -> List[Model]:
+    """Get available models from Z.ai.
+
+    Only GLM-family models (id starting with "glm") are returned, matching
+    the zai provider profile's model_prefix_filter.
+
+    Args:
+        api_key: Z.ai API key (or ZAI_API_KEY env var)
+        base_url: Base URL for API (default: https://api.z.ai/api/paas/v4)
+
+    Returns:
+        List of available models
+
+    Raises:
+        ValueError: If API key is not provided
+        RuntimeError: If API request fails
+    """
+    # Get API key
+    api_key = api_key or os.getenv("ZAI_API_KEY")
+    if not api_key:
+        raise ValueError("Z.ai API key not found. Provide api_key or set ZAI_API_KEY environment variable.")
+
+    # Set defaults
+    base_url = base_url or os.getenv("ZAI_BASE_URL") or "https://api.z.ai/api/paas/v4"
+
+    # Check cache
+    cache_key = _create_cache_key("zai", api_key=api_key, base_url=base_url)
+    cached_models = _model_cache.get(cache_key)
+    if cached_models is not None:
+        return cached_models
+
+    # Prepare headers
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    # Make request
+    try:
+        response = httpx.get(
+            f"{base_url}/models",
+            headers=headers,
+            timeout=60.0
+        )
+
+        if response.status_code >= 400:
+            try:
+                error_data = response.json()
+                error_message = error_data.get("error", {}).get("message", f"HTTP {response.status_code}")
+            except Exception:
+                error_message = f"HTTP {response.status_code}: {response.text}"
+            raise RuntimeError(f"Z.ai API error: {error_message}")
+
+        models_data = response.json()
+
+        # Parse models, keeping only the GLM family
+        all_models = []
+        for model in models_data.get("data", []):
+            if not model["id"].startswith("glm"):
+                continue
+            all_models.append(Model(
+                id=model["id"],
+                owned_by="Z.ai",
+                context_window=model.get("context_window", None),
+            ))
+
+        # Cache results
+        _model_cache.set(cache_key, all_models)
+
+        return all_models
+
+    except httpx.HTTPError as e:
+        raise RuntimeError(f"Failed to fetch Z.ai models: {e}")
+
+
 def get_perplexity_models(
     api_key: Optional[str] = None,
 ) -> List[Model]:
@@ -1112,6 +1190,7 @@ PROVIDER_MODELS_REGISTRY: Dict[str, Callable[..., List[Model]]] = {
     "ollama": get_ollama_models,
     "openrouter": get_openrouter_models,
     "xai": get_xai_models,
+    "zai": get_zai_models,
     "perplexity": get_perplexity_models,
     "jina": get_jina_models,
     "voyage": get_voyage_models,
